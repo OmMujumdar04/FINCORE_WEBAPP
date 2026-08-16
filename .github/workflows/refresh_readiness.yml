@@ -1,0 +1,51 @@
+name: Refresh Readiness Data
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # every 2 hours
+  workflow_dispatch:          # lets you trigger it manually from GitHub's UI too
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install mysql-connector-python pandas python-dotenv
+
+      - name: Write CA certificate to file
+        run: echo "${{ secrets.AIVEN_MYSQL_CA_CERT }}" > ca.pem
+
+      - name: Run Franchise Readiness loader
+        env:
+          AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
+          AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
+          AIVEN_MYSQL_USER: ${{ secrets.AIVEN_MYSQL_USER }}
+          AIVEN_MYSQL_PASSWORD: ${{ secrets.AIVEN_MYSQL_PASSWORD }}
+          AIVEN_MYSQL_DATABASE: ${{ secrets.AIVEN_MYSQL_DATABASE }}
+          AIVEN_MYSQL_CA_PATH: ca.pem
+        run: |
+          cd scripts
+          cp -r ../ca.pem .
+          python load_franchise_readiness.py
+
+      - name: Run BD/TL Readiness loader
+        env:
+          AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
+          AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
+          AIVEN_MYSQL_USER: ${{ secrets.AIVEN_MYSQL_USER }}
+          AIVEN_MYSQL_PASSWORD: ${{ secrets.AIVEN_MYSQL_PASSWORD }}
+          AIVEN_MYSQL_DATABASE: ${{ secrets.AIVEN_MYSQL_DATABASE }}
+          AIVEN_MYSQL_CA_PATH: ca.pem
+        run: |
+          cd scripts
+          python load_bd_tl_readiness.py
