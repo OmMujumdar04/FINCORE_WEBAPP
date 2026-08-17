@@ -25,7 +25,7 @@ jobs:
       - name: Write CA certificate to file
         run: echo "${{ secrets.AIVEN_MYSQL_CA_CERT }}" > ca.pem
 
-      - name: Run Franchise Readiness loader
+      - name: Run Franchise Readiness computation
         env:
           AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
           AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
@@ -35,8 +35,7 @@ jobs:
           AIVEN_MYSQL_CA_PATH: ca.pem
         run: |
           cd scripts
-          cp -r ../ca.pem .
-          python load_franchise_readiness.py
+          python compute_franchise_readiness.py   
 
       - name: Run BD/TL Readiness loader
         env:
