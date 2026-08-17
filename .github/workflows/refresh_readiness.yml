@@ -35,6 +35,7 @@ jobs:
           AIVEN_MYSQL_CA_PATH: ca.pem
         run: |
           cd scripts
+          cp -r ../ca.pem .
           python compute_franchise_readiness.py   
 
       - name: Run BD/TL Readiness loader
