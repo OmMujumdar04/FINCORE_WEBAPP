@@ -38,7 +38,7 @@ jobs:
           cp -r ../ca.pem .
           python compute_franchise_readiness.py   
 
-      - name: Run BD/TL Readiness loader
+      - name: Run BD/TL Readiness computation
         env:
           AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
           AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
@@ -48,4 +48,5 @@ jobs:
           AIVEN_MYSQL_CA_PATH: ca.pem
         run: |
           cd scripts
-          python load_bd_tl_readiness.py
+          cp -r ../ca.pem .
+          python compute_bd_tl_readiness.py
