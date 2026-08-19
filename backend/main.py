@@ -285,3 +285,127 @@ def get_tl_readiness_summary():
         "computed_at": computed_at_row[0][0].isoformat(),
         "flag_counts": [{"readiness_flag": r[0], "count": r[1]} for r in rows]
     }
+
+
+# ============================================================
+# ML INSIGHTS - FORECASTING (PROPHET)
+# ============================================================
+
+@app.get("/api/ml/forecast/revenue")
+def get_revenue_forecast():
+    rows = run_query(
+        """SELECT ds, month_label, actual, forecast, lower_bound, upper_bound, is_forecast, computed_at
+           FROM ml_revenue_forecast
+           ORDER BY ds ASC""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_revenue_forecast")
+
+    computed_at = rows[0][7].isoformat() if hasattr(rows[0][7], 'isoformat') else str(rows[0][7])
+
+    data = [
+        {
+            "ds": r[0].isoformat() if hasattr(r[0], 'isoformat') else str(r[0]),
+            "month": r[1],
+            "actual": float(r[2]) if r[2] is not None else None,
+            "forecast": float(r[3]) if r[3] is not None else None,
+            "lower": float(r[4]) if r[4] is not None else None,
+            "upper": float(r[5]) if r[5] is not None else None,
+            "is_forecast": bool(r[6]),
+        }
+        for r in rows
+    ]
+
+    return {"computed_at": computed_at, "count": len(data), "data": data}
+
+
+@app.get("/api/ml/forecast/revenue/summary")
+def get_revenue_forecast_summary():
+    rows = run_query(
+        """SELECT next_month_label, next_month_val, next_month_lower, next_month_upper,
+                  next_month_yoy_pct, last_actual_label, last_actual_val, forecast_total_6m,
+                  forecast_period_label, computed_at
+           FROM ml_revenue_forecast_kpis
+           WHERE kpi_id = 'latest'""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_revenue_forecast_kpis")
+
+    r = rows[0]
+    computed_at = r[9].isoformat() if hasattr(r[9], 'isoformat') else str(r[9])
+
+    return {
+        "computed_at": computed_at,
+        "kpi": {
+            "next_month_label": r[0],
+            "next_month_val": float(r[1]),
+            "next_month_lower": float(r[2]),
+            "next_month_upper": float(r[3]),
+            "next_month_yoy_pct": float(r[4]) if r[4] is not None else None,
+            "last_actual_label": r[5],
+            "last_actual_val": float(r[6]),
+            "forecast_total_6m": float(r[7]),
+            "forecast_period_label": r[8],
+        }
+    }
+
+
+@app.get("/api/ml/forecast/expense")
+def get_expense_forecast():
+    rows = run_query(
+        """SELECT ds, month_label, actual, forecast, lower_bound, upper_bound, is_forecast, validation_flag, computed_at
+           FROM ml_expense_forecast
+           ORDER BY ds ASC""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_expense_forecast")
+
+    computed_at = rows[0][8].isoformat() if hasattr(rows[0][8], 'isoformat') else str(rows[0][8])
+
+    data = [
+        {
+            "ds": r[0].isoformat() if hasattr(r[0], 'isoformat') else str(r[0]),
+            "month": r[1],
+            "actual": float(r[2]) if r[2] is not None else None,
+            "forecast": float(r[3]) if r[3] is not None else None,
+            "lower": float(r[4]) if r[4] is not None else None,
+            "upper": float(r[5]) if r[5] is not None else None,
+            "is_forecast": bool(r[6]),
+            "validation_flag": r[7],
+        }
+        for r in rows
+    ]
+
+    return {"computed_at": computed_at, "count": len(data), "data": data}
+
+
+@app.get("/api/ml/forecast/expense/summary")
+def get_expense_forecast_summary():
+    rows = run_query(
+        """SELECT next_month_label, next_month_val, next_month_lower, next_month_upper,
+                  historical_avg_val, validation_total_6m, validation_period_label, computed_at
+           FROM ml_expense_forecast_kpis
+           WHERE kpi_id = 'latest'""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_expense_forecast_kpis")
+
+    r = rows[0]
+    computed_at = r[7].isoformat() if hasattr(r[7], 'isoformat') else str(r[7])
+
+    return {
+        "computed_at": computed_at,
+        "kpi": {
+            "next_month_label": r[0],
+            "next_month_val": float(r[1]),
+            "next_month_lower": float(r[2]),
+            "next_month_upper": float(r[3]),
+            "historical_avg_val": float(r[4]),
+            "validation_total_6m": float(r[5]),
+            "validation_period_label": r[6],
+        }
+    }

@@ -1,2 +1,5 @@
 .env
 fincore_source_export.sql
+__pycache__/
+*.pyc
+ca.pem

@@ -1,4 +1,4 @@
-name: Refresh Readiness Data
+name: Refresh Analytics Data
 
 on:
   schedule:
@@ -20,7 +20,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install mysql-connector-python pandas python-dotenv
+          pip install --upgrade pip
+          pip install mysql-connector-python pandas python-dotenv prophet scikit-learn
 
       - name: Write CA certificate to file
         run: echo "${{ secrets.AIVEN_MYSQL_CA_CERT }}" > ca.pem
@@ -36,7 +37,7 @@ jobs:
         run: |
           cd scripts
           cp -r ../ca.pem .
-          python compute_franchise_readiness.py   
+          python compute_franchise_readiness.py
 
       - name: Run BD/TL Readiness computation
         env:
@@ -50,3 +51,29 @@ jobs:
           cd scripts
           cp -r ../ca.pem .
           python compute_bd_tl_readiness.py
+
+      - name: Run Revenue Forecast computation (Prophet)
+        env:
+          AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
+          AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
+          AIVEN_MYSQL_USER: ${{ secrets.AIVEN_MYSQL_USER }}
+          AIVEN_MYSQL_PASSWORD: ${{ secrets.AIVEN_MYSQL_PASSWORD }}
+          AIVEN_MYSQL_DATABASE: ${{ secrets.AIVEN_MYSQL_DATABASE }}
+          AIVEN_MYSQL_CA_PATH: ca.pem
+        run: |
+          cd scripts
+          cp -r ../ca.pem .
+          python compute_revenue_forecast.py
+
+      - name: Run Expense Forecast computation (Prophet Validation)
+        env:
+          AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
+          AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
+          AIVEN_MYSQL_USER: ${{ secrets.AIVEN_MYSQL_USER }}
+          AIVEN_MYSQL_PASSWORD: ${{ secrets.AIVEN_MYSQL_PASSWORD }}
+          AIVEN_MYSQL_DATABASE: ${{ secrets.AIVEN_MYSQL_DATABASE }}
+          AIVEN_MYSQL_CA_PATH: ca.pem
+        run: |
+          cd scripts
+          cp -r ../ca.pem .
+          python compute_expense_forecast.py
