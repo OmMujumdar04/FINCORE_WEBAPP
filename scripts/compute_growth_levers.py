@@ -677,8 +677,3 @@ if __name__ == "__main__":
     print(f"Sanity check — Lever 3 @ activate 20 dormant: ₹{lever3_revenue:,.2f}")
     print(f"Combined: ₹{lever1_revenue + lever3_revenue:,.2f}")
     print(f"Base Revenue: ₹{base_revenue_df.iloc[0]['revenue']:,.2f}")
-
-    bd_confident, bd_watch, tl_confident, tl_watch, req_cagr, target_fy = compute_nx_fit(
-        current_fy, recent_full_fy, base_revenue_df.iloc[0]["revenue"]
-    )
-    write_nx_fit_tables(bd_confident, bd_watch, tl_confident, tl_watch, target_fy, req_cagr)
