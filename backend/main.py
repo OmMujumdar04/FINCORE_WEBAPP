@@ -405,7 +405,7 @@ def get_expense_forecast_summary():
 @app.get("/api/ml/anomalies/{metric}")
 async def get_anomalies(metric: str = Path(..., regex="^(revenue|expense)$")):
     table = f"ml_{metric}_anomalies"
-    rows = run_query(f"SELECT ds, y, anomaly_flag, anomaly_score FROM {table} ORDER BY ds", fetch=True)
+    rows = run_query(f"SELECT ds, y, anomaly_flag, anomaly_score, pct_vs_baseline FROM {table} ORDER BY ds", fetch=True)
     if not rows:
         raise HTTPException(status_code=404, detail=f"No anomaly data found for {metric}")
     data = [
@@ -414,6 +414,7 @@ async def get_anomalies(metric: str = Path(..., regex="^(revenue|expense)$")):
             "y": r[1],
             "anomaly_flag": r[2],
             "anomaly_score": r[3],
+            "pct_vs_baseline": float(r[4]) if r[4] is not None else None,
         }
         for r in rows
     ]
@@ -425,3 +426,142 @@ async def get_anomaly_summary(metric: str = Path(..., regex="^(revenue|expense)$
     rows = run_query(f"SELECT COUNT(*), MAX(computed_at) FROM {table}", fetch=True)
     count, last = rows[0]
     return {"metric": metric, "count": count, "last_computed": last.isoformat() if last else None}
+
+
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+from compute_growth_levers import (
+    compute_nx_fit, build_entity_fy, compute_entity_cagr,
+    required_cagr, run_nx_fit, split_by_confidence,
+    get_current_and_recent_full_fy
+)
+
+# ============================================================
+# GROWTH LEVER SIMULATOR
+# ============================================================
+
+@app.get("/api/growth/base-revenue")
+def get_base_revenue():
+    rows = run_query(
+        "SELECT revenue, recent_full_fy, computed_at FROM growth_base_revenue LIMIT 1",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in growth_base_revenue")
+    r = rows[0]
+    return {
+        "revenue": float(r[0]),
+        "recent_full_fy": r[1],
+        "computed_at": r[2].isoformat(),
+    }
+
+
+@app.get("/api/growth/lever1")
+def get_lever1_inputs():
+    rows = run_query(
+        """SELECT total_active_franchises, departed_franchise_count, avg_departed_revenue,
+                  recent_full_fy, computed_at
+           FROM growth_lever1_inputs LIMIT 1""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in growth_lever1_inputs")
+    r = rows[0]
+    return {
+        "total_active_franchises": r[0],
+        "departed_franchise_count": r[1],
+        "avg_departed_revenue": float(r[2]),
+        "recent_full_fy": r[3],
+        "computed_at": r[4].isoformat(),
+    }
+
+
+@app.get("/api/growth/lever2")
+def get_lever2_inputs():
+    rows = run_query(
+        """SELECT total_enquiries_recent_fy, billed_enquiries_recent_fy, current_strike_ratio,
+                  avg_revenue_per_bill, missing_date_pct, recent_full_fy, computed_at
+           FROM growth_lever2_inputs LIMIT 1""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in growth_lever2_inputs")
+    r = rows[0]
+    return {
+        "total_enquiries_recent_fy": r[0],
+        "billed_enquiries_recent_fy": r[1],
+        "current_strike_ratio": float(r[2]),
+        "avg_revenue_per_bill": float(r[3]),
+        "missing_date_pct": float(r[4]),
+        "recent_full_fy": r[5],
+        "computed_at": r[6].isoformat(),
+    }
+
+
+@app.get("/api/growth/lever3")
+def get_lever3_inputs():
+    rows = run_query(
+        """SELECT max_dormant_available, avg_activated_revenue_recent_fy, avg_activated_revenue_lifetime,
+                  real_activation_count, method_used, recent_full_fy, computed_at
+           FROM growth_lever3_inputs LIMIT 1""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in growth_lever3_inputs")
+    r = rows[0]
+    return {
+        "max_dormant_available": r[0],
+        "avg_activated_revenue_recent_fy": float(r[1]),
+        "avg_activated_revenue_lifetime": float(r[2]) if r[2] is not None else None,
+        "real_activation_count": r[3],
+        "method_used": r[4],
+        "recent_full_fy": r[5],
+        "computed_at": r[6].isoformat(),
+    }
+
+
+@app.get("/api/growth/nx-fit/{entity}")
+def get_nx_fit(entity: str, target_multiplier: float = Query(3.0), horizon_years: int = Query(5)):
+    """
+    Fully LIVE — recomputed on every request, not cached in Aiven.
+    Because Nx-Fit is target-dependent (founder's slider/custom goal),
+    it must always reflect exactly what was asked, not a stale scenario.
+    """
+    if entity not in ("bd", "tl"):
+        raise HTTPException(status_code=400, detail="entity must be 'bd' or 'tl'")
+    if target_multiplier <= 0 or horizon_years <= 0:
+        raise HTTPException(status_code=400, detail="target_multiplier and horizon_years must be positive")
+
+    current_fy, recent_full_fy = get_current_and_recent_full_fy()
+
+    base_rows = run_query("SELECT revenue FROM growth_base_revenue LIMIT 1", fetch=True)
+    if not base_rows:
+        raise HTTPException(status_code=404, detail="No base revenue available — run growth lever computation first")
+    base_revenue = float(base_rows[0][0])
+
+    entity_col = "nameOfBd" if entity == "bd" else "teamLeader"
+    entity_fy = build_entity_fy(entity_col)
+    entity_cagr_df = compute_entity_cagr(entity_fy, entity_col, current_fy)
+
+    target_year_start = int(recent_full_fy.split("-")[0]) + horizon_years
+    target_fy = f"{target_year_start}-{target_year_start + 1}"
+    target_revenue = base_revenue * target_multiplier
+
+    nx_df, req_cagr, years = run_nx_fit(entity_cagr_df, base_revenue, target_revenue, recent_full_fy, target_fy)
+    confident, watch = split_by_confidence(nx_df, entity_col)
+
+    def to_records(df):
+        df = df.replace({float('nan'): None})
+        return df.to_dict(orient="records")
+
+    return {
+        "entity": entity,
+        "target_multiplier": target_multiplier,
+        "horizon_years": horizon_years,
+        "target_fy": target_fy,
+        "required_cagr": req_cagr,
+        "base_revenue": base_revenue,
+        "target_revenue": target_revenue,
+        "confident": to_records(confident),
+        "watchlist": to_records(watch),
+    }
