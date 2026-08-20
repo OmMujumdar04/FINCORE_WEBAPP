@@ -67,19 +67,6 @@
 # def get_franchise_readiness_summary(basis: str):
 #     if basis not in VALID_BASES:
 #         raise HTTPException(status_code=400, detail="basis must be 'net' or 'gross'")
-
-#     table_name = f"franchise_readiness_calculated_{basis}"
-
-#     rows = run_query(
-#         f"SELECT readiness_flag, COUNT(*) FROM {table_name} GROUP BY readiness_flag ORDER BY COUNT(*) DESC",
-#         fetch=True
-#     )
-#     computed_at_row = run_query(f"SELECT MAX(computed_at) FROM {table_name}", fetch=True)
-
-#     if not rows:
-#         raise HTTPException(status_code=404, detail=f"No data found in {table_name}")
-
-#     return {
 #         "basis": basis,
 #         "computed_at": computed_at_row[0][0].isoformat(),
 #         "flag_counts": [{"readiness_flag": r[0], "count": r[1]} for r in rows]
@@ -92,7 +79,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 from db_connection import run_query
-
+from fastapi import Query, Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -409,3 +396,32 @@ def get_expense_forecast_summary():
             "validation_period_label": r[6],
         }
     }
+
+# --------------------------------------------
+# Anomaly Detection Endpoints
+# --------------------------------------------
+
+
+@app.get("/api/ml/anomalies/{metric}")
+async def get_anomalies(metric: str = Path(..., regex="^(revenue|expense)$")):
+    table = f"ml_{metric}_anomalies"
+    rows = run_query(f"SELECT ds, y, anomaly_flag, anomaly_score FROM {table} ORDER BY ds", fetch=True)
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No anomaly data found for {metric}")
+    data = [
+        {
+            "ds": r[0].isoformat() if hasattr(r[0], 'isoformat') else str(r[0]),
+            "y": r[1],
+            "anomaly_flag": r[2],
+            "anomaly_score": r[3],
+        }
+        for r in rows
+    ]
+    return {"metric": metric, "count": len(data), "data": data}
+
+@app.get("/api/ml/anomalies/{metric}/summary")
+async def get_anomaly_summary(metric: str = Path(..., regex="^(revenue|expense)$")):
+    table = f"ml_{metric}_anomalies"
+    rows = run_query(f"SELECT COUNT(*), MAX(computed_at) FROM {table}", fetch=True)
+    count, last = rows[0]
+    return {"metric": metric, "count": count, "last_computed": last.isoformat() if last else None}
