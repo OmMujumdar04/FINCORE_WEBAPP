@@ -90,3 +90,16 @@ jobs:
           cd scripts
           cp -r ../ca.pem .
           python compute_growth_levers.py
+
+      - name: Run Clustering computation
+        env:
+          AIVEN_MYSQL_HOST: ${{ secrets.AIVEN_MYSQL_HOST }}
+          AIVEN_MYSQL_PORT: ${{ secrets.AIVEN_MYSQL_PORT }}
+          AIVEN_MYSQL_USER: ${{ secrets.AIVEN_MYSQL_USER }}
+          AIVEN_MYSQL_PASSWORD: ${{ secrets.AIVEN_MYSQL_PASSWORD }}
+          AIVEN_MYSQL_DATABASE: ${{ secrets.AIVEN_MYSQL_DATABASE }}
+          AIVEN_MYSQL_CA_PATH: ca.pem
+        run: |
+          cd scripts
+          cp -r ../ca.pem .
+          python compute_clustering.py
