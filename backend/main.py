@@ -565,3 +565,110 @@ def get_nx_fit(entity: str, target_multiplier: float = Query(3.0), horizon_years
         "confident": to_records(confident),
         "watchlist": to_records(watch),
     }
+
+
+# ============================================================
+# ML CLUSTERING
+# ============================================================
+
+@app.get("/api/ml/clustering/franchise")
+def get_franchise_clustering():
+    rows = run_query(
+        """SELECT franchiseName, total_revenue, total_bills, avg_revenue_per_bill,
+                  bills_per_month, active_months, cluster_label, low_confidence, status, computed_at
+           FROM ml_franchise_clustering ORDER BY total_revenue DESC""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_franchise_clustering")
+    computed_at = rows[0][9].isoformat()
+    data = [
+        {
+            "franchiseName": r[0],
+            "total_revenue": float(r[1]),
+            "total_bills": r[2],
+            "avg_revenue_per_bill": float(r[3]),
+            "bills_per_month": float(r[4]),
+            "active_months": r[5],
+            "cluster_label": r[6],
+            "low_confidence": bool(r[7]),
+            "status": r[8],
+        }
+        for r in rows
+    ]
+    return {"computed_at": computed_at, "count": len(data), "data": data}
+
+
+@app.get("/api/ml/clustering/dormant-franchises")
+def get_dormant_franchises():
+    rows = run_query(
+        """SELECT nameAsPerAgreement, city, state, joiningDate, status, computed_at
+           FROM ml_dormant_franchises ORDER BY nameAsPerAgreement""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_dormant_franchises")
+    computed_at = rows[0][5].isoformat()
+    data = [
+        {
+            "nameAsPerAgreement": r[0],
+            "city": r[1],
+            "state": r[2],
+            "joiningDate": r[3].isoformat() if r[3] else None,
+            "status": r[4],
+        }
+        for r in rows
+    ]
+    return {"computed_at": computed_at, "count": len(data), "data": data}
+
+
+@app.get("/api/ml/clustering/industry")
+def get_industry_clustering():
+    rows = run_query(
+        """SELECT industry, total_revenue, total_bills, avg_revenue_per_bill,
+                  unique_franchises, cluster_label, low_confidence, computed_at
+           FROM ml_industry_clustering ORDER BY total_revenue DESC""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_industry_clustering")
+    computed_at = rows[0][7].isoformat()
+    data = [
+        {
+            "industry": r[0],
+            "total_revenue": float(r[1]),
+            "total_bills": r[2],
+            "avg_revenue_per_bill": float(r[3]),
+            "unique_franchises": r[4],
+            "cluster_label": r[5],
+            "low_confidence": bool(r[6]),
+        }
+        for r in rows
+    ]
+    return {"computed_at": computed_at, "count": len(data), "data": data}
+
+
+@app.get("/api/ml/clustering/subindustry")
+def get_subindustry_clustering():
+    rows = run_query(
+        """SELECT subIndustry, total_revenue, total_bills, avg_revenue_per_bill,
+                  unique_franchises, cluster_label, low_confidence, computed_at
+           FROM ml_subindustry_clustering ORDER BY total_revenue DESC""",
+        fetch=True
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data found in ml_subindustry_clustering")
+    computed_at = rows[0][7].isoformat()
+    data = [
+        {
+            "subIndustry": r[0],
+            "total_revenue": float(r[1]),
+            "total_bills": r[2],
+            "avg_revenue_per_bill": float(r[3]),
+            "unique_franchises": r[4],
+            "cluster_label": r[5],
+            "low_confidence": bool(r[6]),
+        }
+        for r in rows
+    ]
+    return {"computed_at": computed_at, "count": len(data), "data": data}
