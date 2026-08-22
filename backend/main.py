@@ -90,7 +90,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://fincore-webapp.onrender.com",  # not strictly needed but harmless
-        "*",    # add this once you have it — see Step 7
+        "https://fincore-frontend-gray.vercel.app",    # add this once you have it — see Step 7
     ],
     allow_methods=["*"],
     allow_headers=["*"],
