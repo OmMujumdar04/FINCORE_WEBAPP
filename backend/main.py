@@ -1,79 +1,3 @@
-# import sys
-# import os
-
-# # Reuse the same db_connection.py from scripts/ — don't duplicate connection logic
-# sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-# from db_connection import run_query
-
-# from fastapi import FastAPI, HTTPException
-# from fastapi.middleware.cors import CORSMiddleware
-
-# app = FastAPI(title="FINCORE API")
-
-# # CORS: allows the Next.js frontend (running on a different origin/port) to call this API.
-# # Wide open for now during local dev — will be tightened to the real frontend URL once deployed.
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
-# VALID_BASES = {"net", "gross"}
-
-# @app.get("/api/franchise-readiness/{basis}")
-# def get_franchise_readiness(basis: str):
-#     if basis not in VALID_BASES:
-#         raise HTTPException(status_code=400, detail="basis must be 'net' or 'gross'")
-
-#     table_name = f"franchise_readiness_calculated_{basis}"
-
-#     rows = run_query(
-#         f"""SELECT franchise_name, lifetime_revenue, lifetime_rank, recent_fy_revenue,
-#                    recent_fy_rank, recent_fy_status, trajectory, momentum, readiness_flag, computed_at
-#             FROM {table_name}
-#             ORDER BY lifetime_rank ASC""",
-#         fetch=True
-#     )
-
-#     if not rows:
-#         raise HTTPException(status_code=404, detail=f"No data found in {table_name}")
-
-#     computed_at = rows[0][9].isoformat()
-
-#     data = [
-#         {
-#             "franchise_name": r[0],
-#             "lifetime_revenue": float(r[1]),
-#             "lifetime_rank": r[2],
-#             "recent_fy_revenue": float(r[3]) if r[3] is not None else None,
-#             "recent_fy_rank": r[4],
-#             "recent_fy_status": r[5],
-#             "trajectory": r[6],
-#             "momentum": r[7],
-#             "readiness_flag": r[8],
-#         }
-#         for r in rows
-#     ]
-
-#     return {
-#         "basis": basis,
-#         "computed_at": computed_at,
-#         "count": len(data),
-#         "data": data
-#     }
-
-# @app.get("/api/franchise-readiness/{basis}/summary")
-# def get_franchise_readiness_summary(basis: str):
-#     if basis not in VALID_BASES:
-#         raise HTTPException(status_code=400, detail="basis must be 'net' or 'gross'")
-#         "basis": basis,
-#         "computed_at": computed_at_row[0][0].isoformat(),
-#         "flag_counts": [{"readiness_flag": r[0], "count": r[1]} for r in rows]
-#     }
-
-
-
 import sys
 import os
 
@@ -531,8 +455,8 @@ def get_nx_fit(entity: str, target_multiplier: float = Query(3.0), horizon_years
     Because Nx-Fit is target-dependent (founder's slider/custom goal),
     it must always reflect exactly what was asked, not a stale scenario.
     """
-    if entity not in ("bd", "tl"):
-        raise HTTPException(status_code=400, detail="entity must be 'bd' or 'tl'")
+    if entity not in ("bd", "tl", "franchise"):
+        raise HTTPException(status_code=400, detail="entity must be 'bd', 'tl', or 'franchise'")
     if target_multiplier <= 0 or horizon_years <= 0:
         raise HTTPException(status_code=400, detail="target_multiplier and horizon_years must be positive")
 
@@ -543,7 +467,7 @@ def get_nx_fit(entity: str, target_multiplier: float = Query(3.0), horizon_years
         raise HTTPException(status_code=404, detail="No base revenue available — run growth lever computation first")
     base_revenue = float(base_rows[0][0])
 
-    entity_col = "nameOfBd" if entity == "bd" else "teamLeader"
+    entity_col = {"bd": "nameOfBd", "tl": "teamLeader", "franchise": "franchiseName"}[entity]
     entity_fy = build_entity_fy(entity_col)
     entity_cagr_df = compute_entity_cagr(entity_fy, entity_col, current_fy)
 
@@ -570,6 +494,19 @@ def get_nx_fit(entity: str, target_multiplier: float = Query(3.0), horizon_years
         "watchlist": to_records(watch),
     }
 
+from compute_fair_share import compute_fair_share
+
+@app.get("/api/growth/fair-share")
+def get_fair_share(target_multiplier: float = 3, horizon_years: int = 5):
+    """
+    Live/on-demand, same as Nx-Fit — never cached, since the result depends entirely
+    on whatever target the founder is currently testing.
+    """
+    try:
+        result = compute_fair_share(target_multiplier=target_multiplier, horizon_years=horizon_years)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fair share computation failed: {str(e)}")
 
 # ============================================================
 # ML CLUSTERING
